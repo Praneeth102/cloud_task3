@@ -1,0 +1,185 @@
+provider "aws" {
+  region     = "ap-south-1"
+  profile = "praneeth"
+}
+
+
+
+resource "aws_vpc" "task3_vpc" {
+  cidr_block       = "192.168.0.0/16"
+  instance_tenancy = "default"
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "task3_vpc"
+  }
+}
+
+
+output "first"{
+  value=aws_vpc.task3_vpc
+}
+
+
+
+resource "aws_subnet" "subnet1" {
+  vpc_id     = aws_vpc.task3_vpc.id
+  cidr_block = "192.168.0.0/24"
+  availability_zone = "ap-south-1a"
+  map_public_ip_on_launch = true
+  
+
+  tags = {
+    Name = "subnet1"
+  }
+}
+
+resource "aws_subnet" "subnet2" {
+  vpc_id     = aws_vpc.task3_vpc.id
+  cidr_block = "192.168.1.0/24"
+  availability_zone = "ap-south-1b"
+
+  tags = {
+    Name = "subnet2"
+  }
+}
+
+
+
+resource "aws_internet_gateway" "internet_gw" {
+  vpc_id = aws_vpc.task3_vpc.id
+
+  tags = {
+    Name = "internet_gw"
+  }
+}
+
+resource "aws_route_table" "route_table" {
+  vpc_id = aws_vpc.task3_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.internet_gw.id
+  }
+
+  
+  tags = {
+    Name = "public_rt"
+  }
+}
+
+resource "aws_route_table_association" "subnet_association" {
+  subnet_id      = aws_subnet.subnet1.id
+  route_table_id = aws_route_table.route_table.id
+}
+
+resource "aws_security_group" "first_security" {
+  name        = "first"
+  description = "for http server"
+  vpc_id = aws_vpc.task3_vpc.id
+  
+
+  ingress {
+    description = "http"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    
+  }
+ 
+  ingress {
+    description = "ssh"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "second"
+  }
+}
+
+
+resource "tls_private_key" "firstkey" {
+  algorithm   = "RSA"
+  
+  
+}
+
+
+
+
+module "key_pair" {
+  source = "terraform-aws-modules/key-pair/aws"
+
+  key_name   = "key123"
+  public_key = tls_private_key.firstkey.public_key_openssh
+
+}
+
+
+resource "aws_instance" "wordpress" {
+  ami           = "ami-000cbce3e1b899ebd"
+  instance_type = "t2.micro"
+  vpc_security_group_ids = [aws_security_group.first_security.id]
+  subnet_id = aws_subnet.subnet1.id
+  key_name = "key123"
+
+
+  tags = {
+    Name = "wordpress"
+  }
+}
+
+resource "aws_security_group" "second_security" {
+  name        = "second"
+  description = "for http server"
+  vpc_id = aws_vpc.task3_vpc.id
+  
+
+  
+ 
+  ingress {
+    description = "ssh"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "third"
+  }
+}
+
+
+resource "aws_instance" "mysql" {
+  ami           = "ami-08706cb5f68222d09"
+  instance_type = "t2.micro"
+  vpc_security_group_ids = [aws_security_group.second_security.id]
+  subnet_id = aws_subnet.subnet2.id
+  key_name = "key123"
+
+
+  tags = {
+    Name = "mysql"
+  }
+}
